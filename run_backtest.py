@@ -1,14 +1,12 @@
-"""Run the momentum backtest.
-
-Usage:
-  python run_backtest.py --synthetic          # offline test with synthetic data
-  python run_backtest.py                      # real ETF data via yfinance
-  python run_backtest.py --lookback 6         # sensitivity: 6-month lookback
-"""
+"""Command-line entry point for the momentum backtest."""
 from __future__ import annotations
 
 import argparse
-import os
+import json
+import platform
+from datetime import UTC, datetime
+from importlib.metadata import version
+from pathlib import Path
 
 import matplotlib
 
@@ -16,26 +14,30 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from src.analysis import analyze
+from src.backtest import equity_curve
 from src.data import DEFAULT_UNIVERSE, load_prices, synthetic_prices
-from src.strategy import momentum_signal, top_quantile_weights
-from src.backtest import run_backtest, equity_curve
-from src.metrics import summary_table
 
-RESULTS = os.path.join(os.path.dirname(__file__), "results")
+RESULTS = Path(__file__).resolve().parent / "results"
 
 
-def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--synthetic", action="store_true", help="use synthetic data (offline)")
-    p.add_argument("--start", default="2015-01-01")
-    p.add_argument("--end", default="2025-01-01")
-    p.add_argument("--lookback", type=int, default=12, help="momentum lookback in months")
-    p.add_argument("--tc-bps", type=float, default=10.0, help="transaction cost in basis points")
-    p.add_argument("--quantile", type=float, default=0.2, help="top quantile held long")
-    args = p.parse_args()
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--synthetic", action="store_true", help="use deterministic offline data")
+    parser.add_argument("--start", default="2015-01-01")
+    parser.add_argument("--end", default="2025-01-01")
+    parser.add_argument("--lookback", type=int, default=12, help="momentum lookback in months")
+    parser.add_argument("--tc-bps", type=float, default=10.0, help="transaction cost in basis points")
+    parser.add_argument("--quantile", type=float, default=0.2, help="top quantile held long")
+    return parser
 
-    os.makedirs(RESULTS, exist_ok=True)
 
+def main() -> None:
+    args = build_parser().parse_args()
+    if pd.Timestamp(args.start) >= pd.Timestamp(args.end):
+        raise SystemExit("--start must be earlier than --end")
+
+    RESULTS.mkdir(parents=True, exist_ok=True)
     if args.synthetic:
         prices = synthetic_prices()
         tag = "synthetic"
@@ -44,42 +46,59 @@ def main():
         prices = load_prices(DEFAULT_UNIVERSE, args.start, args.end)
         tag = "real"
 
-    # --- strategy ---
-    signal = momentum_signal(prices, lookback_months=args.lookback, skip_months=1)
-    weights = top_quantile_weights(signal, quantile=args.quantile)
-    bt = run_backtest(prices, weights, tc_bps=args.tc_bps)
+    result = analyze(
+        prices,
+        lookback_months=args.lookback,
+        tc_bps=args.tc_bps,
+        quantile=args.quantile,
+    )
 
-    # gross version (no costs) to show cost impact
-    bt_gross = run_backtest(prices, weights, tc_bps=0.0)
+    print(f"Evaluation starts at the rebalance close on {result.evaluation_start.date()}.")
+    print("\n", result.summary, "\n")
+    print(f"Average one-way turnover per rebalance: {result.average_turnover:.1%}")
 
-    # --- benchmark: equal-weight buy & hold, rebalanced monthly ---
-    monthly_dates = prices.resample("ME").last().index
-    ew = pd.DataFrame(1.0 / prices.shape[1], index=monthly_dates, columns=prices.columns)
-    bench = run_backtest(prices, ew, tc_bps=args.tc_bps)
+    stem = f"{tag}_L{args.lookback}"
+    result.summary.to_csv(RESULTS / f"summary_{stem}.csv", index_label="Strategy")
 
-    # --- results ---
-    table = summary_table({
-        f"Momentum {args.lookback}-1 (net, {args.tc_bps:.0f}bps)": bt["ret"],
-        f"Momentum {args.lookback}-1 (gross)": bt_gross["ret"],
-        "Equal-weight benchmark (net)": bench["ret"],
-    })
-    print("\n", table, "\n")
-    avg_turnover = bt.loc[bt["turnover"] > 0, "turnover"].mean()
-    print(f"Average one-way turnover per rebalance: {avg_turnover:.1%}")
-    table.to_csv(os.path.join(RESULTS, f"summary_{tag}_L{args.lookback}.csv"))
-
-    # --- charts ---
     fig, ax = plt.subplots(figsize=(10, 5.5))
-    equity_curve(bt["ret"]).plot(ax=ax, label=f"Momentum {args.lookback}-1 (net)")
-    equity_curve(bt_gross["ret"]).plot(ax=ax, label="Momentum (gross)", linestyle="--", alpha=0.7)
-    equity_curve(bench["ret"]).plot(ax=ax, label="Equal-weight benchmark")
+    equity_curve(result.momentum["ret"]).plot(
+        ax=ax,
+        label=f"Momentum {args.lookback}-1 (net)",
+    )
+    equity_curve(result.gross["ret"]).plot(
+        ax=ax,
+        label="Momentum (gross)",
+        linestyle="--",
+        alpha=0.7,
+    )
+    equity_curve(result.benchmark["ret"]).plot(ax=ax, label="Equal-weight benchmark")
     ax.set_title(f"Cross-sectional momentum vs. benchmark ({tag} data)")
     ax.set_ylabel("Growth of $1")
     ax.legend()
     ax.grid(alpha=0.3)
     fig.tight_layout()
-    fig.savefig(os.path.join(RESULTS, f"equity_curve_{tag}_L{args.lookback}.png"), dpi=150)
-    print(f"Saved results to {RESULTS}/")
+    fig.savefig(RESULTS / f"equity_curve_{stem}.png", dpi=150)
+    plt.close(fig)
+
+    metadata = {
+        "generated_at_utc": datetime.now(UTC).isoformat(),
+        "python": platform.python_version(),
+        "pandas": version("pandas"),
+        "numpy": version("numpy"),
+        "yfinance": version("yfinance"),
+        "universe": list(prices.columns),
+        "start": str(prices.index.min().date()),
+        "end": str(prices.index.max().date()),
+        "lookback_months": args.lookback,
+        "transaction_cost_bps": args.tc_bps,
+        "quantile": args.quantile,
+        "evaluation_start": str(result.evaluation_start.date()),
+    }
+    (RESULTS / f"metadata_{stem}.json").write_text(
+        json.dumps(metadata, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    print(f"Saved results and run metadata to {RESULTS}/")
 
 
 if __name__ == "__main__":
