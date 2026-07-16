@@ -1,70 +1,126 @@
 # Systematic Momentum Strategy — Backtesting Engine
 
-A vectorized backtesting engine built from scratch in Python (pandas/numpy), used to
-evaluate a classic **12-1 cross-sectional momentum strategy** on a universe of 24 liquid
-ETFs over 10 years, net of transaction costs.
+[![CI](https://github.com/sfondrinimaria02-del/momentum-backtest/actions/workflows/ci.yml/badge.svg)](https://github.com/sfondrinimaria02-del/momentum-backtest/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-*Author: Maria Sfondrini — Master in Finance, Peking University HSBC Business School;
+A transparent Python backtesting engine for a classic **12-1 cross-sectional momentum
+strategy** on a diversified ETF universe. The project emphasizes reproducible research,
+explicit execution assumptions, transaction costs, and tests for common backtesting errors.
+
+*Maria Sfondrini — Master in Finance, Peking University HSBC Business School;
 B.Sc. Computer System Engineering, Politecnico di Milano.*
 
-## Why build the engine from scratch?
+## What the engine models
 
-Off-the-shelf backtesters hide the decisions that matter. Building the engine myself
-forced me to handle explicitly:
+- **Signal:** trailing 12-month return excluding the most recent month, calculated on the
+  actual final trading observation of each calendar month.
+- **Portfolio:** equal-weight long allocation to the top quintile of valid signals.
+- **Execution:** the signal is scheduled for the close of the first trading session after
+  month-end. New weights earn returns from the following close-to-close interval.
+- **Weight drift:** holdings move with asset returns between monthly rebalances.
+- **Transaction costs:** linear costs are charged on actual one-way turnover,
+  `sum(abs(target_weight - drifted_weight))`.
+- **Benchmark:** a monthly rebalanced equal-weight portfolio using the same universe,
+  cost model, execution convention, and investable start date.
 
-- **Look-ahead bias** — signals computed at month-end *t* are only traded on the first
-  trading day after *t*.
-- **Weight drift** — between rebalances, holdings drift with returns instead of being
-  implicitly rebalanced daily (a subtle bug in many naive backtests).
-- **Transaction costs** — charged on actual turnover `Σ|w_new − w_drifted|`, so the
-  cost of the strategy's ~50% monthly one-way turnover is measured, not assumed away.
+The shared investable start is important: neither the benchmark nor a shorter-lookback
+variant receives additional market exposure during another strategy's signal warm-up.
 
-## Strategy
+## Reproducing results
 
-- **Signal:** 12-1 momentum — trailing 12-month return excluding the most recent month
-  (to avoid short-term reversal), computed on month-end prices.
-- **Portfolio:** equal-weight long the top quintile; monthly rebalance.
-- **Universe:** 24 liquid ETFs across equities (regional + sector), rates, credit,
-  commodities and real estate.
-- **Benchmark:** equal-weight buy-and-hold of the same universe, same costs.
-
-## Results (real data, 2015–2024)
-
-| Strategy | CAGR | Ann. Vol | Sharpe | Sortino | Max DD |
-|---|---|---|---|---|---|
-| Momentum 12-1 (net, 10 bps) | **9.0%** | 14.7% | **0.66** | 0.81 | −23.3% |
-| Momentum 12-1 (gross) | 9.6% | 14.7% | 0.70 | 0.86 | −23.2% |
-| Equal-weight benchmark (net) | 7.8% | 12.9% | 0.65 | 0.79 | −27.7% |
-
-Average one-way turnover: 52.9% per monthly rebalance. Sensitivity: performance
-improves monotonically with lookback (6-1: Sharpe 0.43 → 9-1: 0.58 → 12-1: 0.66).
-Full analysis and honest interpretation in [RESEARCH_NOTE.md](RESEARCH_NOTE.md).
-
-Run `python run_backtest.py` to reproduce (downloads data via yfinance, cached).
-
-## Honest limitations
-
-- Long-only top-quintile on ETFs is a blunt version of the academic long-short factor;
-  results are driven partly by beta, not pure momentum.
-- No slippage model beyond linear costs; no borrow constraints tested.
-- Survivorship is mitigated (ETF universe fixed ex-ante) but the universe choice itself
-  embeds hindsight.
-- 10 years is a short sample for a monthly-rebalanced strategy (~120 independent bets).
-
-## Structure
-
-```
-src/data.py       # yfinance loader with CSV cache + synthetic generator for offline tests
-src/strategy.py   # momentum signal and portfolio construction
-src/backtest.py   # vectorized engine: rebalancing, weight drift, transaction costs
-src/metrics.py    # CAGR, Sharpe, Sortino, max drawdown, summary table
-run_backtest.py   # CLI entry point
-```
-
-## Setup
+Requires Python 3.10 or newer.
 
 ```bash
-pip install -r requirements.txt
-python run_backtest.py              # real data (downloads via yfinance, cached)
-python run_backtest.py --synthetic  # offline engine test
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+pip install -e ".[dev]"
+
+python -m momentum_backtest.cli
+python -m momentum_backtest.cli --synthetic
+python -m momentum_backtest.cli --lookback 6 --tc-bps 10 --quantile 0.2
+# or, after installation:
+momentum-backtest --lookback 6
 ```
+
+Real-data runs download adjusted closing prices through `yfinance`. Downloads are
+validated before use and cached by date range **and exact ticker universe**. An empty,
+partial, duplicated, non-finite, or non-positive dataset causes the run to fail rather
+than produce misleading output.
+
+Each successful run writes the following ignored artifacts under `results/`:
+
+- a summary CSV;
+- an equity-curve PNG;
+- a JSON record containing parameters, package versions, universe, and evaluation dates.
+
+## Reference run
+
+Close-only methodology, 10 bps transaction costs, common evaluation window 1 February
+2016–31 December 2024. Independently reproduced bit-for-bit against a fresh Yahoo Finance
+pull on 16 July 2026 (see `results/metadata_real_L12.json` for the exact package versions
+and universe from that run):
+
+| Portfolio | CAGR | Ann. vol | Sharpe | Sortino | Max drawdown |
+|---|---:|---:|---:|---:|---:|
+| Momentum 12-1, net | **10.0%** | 15.6% | 0.69 | 0.96 | **−22.9%** |
+| Momentum 12-1, gross | 10.7% | 15.6% | 0.73 | 1.02 | −22.6% |
+| Equal-weight benchmark, net | 9.7% | **13.0%** | **0.78** | **1.08** | −27.6% |
+
+Average one-way momentum turnover was 53.0% per rebalance. Momentum delivered a slightly
+higher net CAGR and a shallower drawdown, but the diversified benchmark had the stronger
+risk-adjusted performance. This is not evidence of a robust selection premium.
+
+Historical adjusted prices can be revised. Regenerated claims should therefore be tied
+to the output metadata file and a specific Git commit.
+
+## Repository structure
+
+```text
+.
+├── .github/workflows/ci.yml        # lint, coverage, and unit tests on Python 3.10 and 3.12
+├── src/momentum_backtest/
+│   ├── analysis.py                 # aligned strategy/benchmark orchestration
+│   ├── backtest.py                 # execution, drift, turnover, and transaction costs
+│   ├── cli.py                      # command-line entry point
+│   ├── data.py                     # validated yfinance cache and synthetic generator
+│   ├── metrics.py                  # CAGR, volatility, Sharpe, Sortino, drawdown
+│   └── strategy.py                 # month-end signals and portfolio construction
+├── tests/                          # deterministic tests; real data mocked at the API boundary
+├── Momentum_Backtest.ipynb         # research workflow using the shared source modules
+└── RESEARCH_NOTE.md                # methodology and interpretation framework
+```
+
+## Development checks
+
+```bash
+pip install -e ".[dev]"
+ruff check .
+pytest --cov=momentum_backtest --cov-report=term-missing
+```
+
+The test suite covers signal timing, actual trading-month ends, portfolio normalization,
+rebalance timing, transaction costs, aligned evaluation periods, input validation error
+paths, and the yfinance response-parsing and caching logic (mocked at the API boundary -
+no real network calls in the default run). CI has read-only repository permissions.
+
+## Research limitations
+
+- A long-only ETF portfolio is not the academic long-short momentum factor and retains
+  substantial market beta.
+- The fixed ETF universe mitigates delisting churn but remains selected with hindsight.
+- Yahoo Finance is convenient rather than an institutional-grade point-in-time database.
+- Linear costs omit market impact, bid-ask variation, taxes, and capacity constraints.
+- A ten-year monthly sample is too short to establish a statistically robust edge.
+- The engine does not model intraday fills; its close-only execution rule is intentionally
+  conservative and explicit.
+
+See [RESEARCH_NOTE.md](RESEARCH_NOTE.md) for the research design and interpretation rules.
+
+## Disclaimer
+
+This repository is an educational research project, not investment advice.
+
+## License
+
+Released under the [MIT License](LICENSE).
