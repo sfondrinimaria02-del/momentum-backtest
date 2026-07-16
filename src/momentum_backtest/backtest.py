@@ -5,6 +5,7 @@ session strictly after the signal date. New weights therefore earn returns
 starting with the following close-to-close interval. This conservative timing
 avoids assigning an overnight return to a portfolio that was not yet tradable.
 """
+
 from __future__ import annotations
 
 import numpy as np

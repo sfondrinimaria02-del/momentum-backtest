@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from src.metrics import cagr, max_drawdown
+from momentum_backtest.metrics import cagr, max_drawdown
 
 
 def test_cagr_for_one_trading_year() -> None:

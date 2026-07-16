@@ -1,4 +1,5 @@
 """Cross-sectional momentum signal and portfolio construction."""
+
 from __future__ import annotations
 
 import numpy as np

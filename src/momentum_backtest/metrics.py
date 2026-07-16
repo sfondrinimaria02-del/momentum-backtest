@@ -1,4 +1,5 @@
 """Performance and risk metrics with explicit input validation."""
+
 from __future__ import annotations
 
 import numpy as np

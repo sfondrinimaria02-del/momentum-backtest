@@ -21,6 +21,6 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - run: python -m pip install --upgrade pip
-      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pip install -e ".[dev]"
       - run: ruff check .
-      - run: pytest
+      - run: pytest --cov=momentum_backtest --cov-report=term-missing

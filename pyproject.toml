@@ -1,5 +1,48 @@
-[tool.pytest.ini_options]
-testpaths = ["tests"]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "momentum-backtest"
+version = "0.1.0"
+description = "A transparent, close-only backtesting engine for a 12-1 cross-sectional momentum strategy on a diversified ETF universe, with an aligned equal-weight benchmark and explicit execution/cost assumptions."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Maria Sfondrini", email = "276984303+sfondrinimaria02-del@users.noreply.github.com" }]
+keywords = ["quantitative-finance", "momentum", "backtesting", "etf", "trading"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+dependencies = [
+    "pandas>=2.2,<4",
+    "numpy>=1.26,<3",
+    "matplotlib>=3.8,<4",
+    "yfinance>=0.2.54,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0,<10",
+    "pytest-cov>=5.0",
+    "pytest-mock>=3.14",
+    "ruff>=0.11,<1",
+]
+
+[project.scripts]
+momentum-backtest = "momentum_backtest.cli:main"
+
+[project.urls]
+Repository = "https://github.com/sfondrinimaria02-del/momentum-backtest"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/momentum_backtest"]
 
 [tool.ruff]
 extend-exclude = ["*.ipynb"]
@@ -7,4 +50,11 @@ line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F", "I"]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -m 'not integration'"
+markers = [
+    "integration: hits the real Yahoo Finance API; run explicitly with `pytest -m integration`",
+]

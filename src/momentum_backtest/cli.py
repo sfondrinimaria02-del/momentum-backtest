@@ -1,4 +1,5 @@
 """Command-line entry point for the momentum backtest."""
+
 from __future__ import annotations
 
 import argparse
@@ -14,11 +15,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from src.analysis import analyze
-from src.backtest import equity_curve
-from src.data import DEFAULT_UNIVERSE, load_prices, synthetic_prices
+from momentum_backtest.analysis import analyze
+from momentum_backtest.backtest import equity_curve
+from momentum_backtest.data import DEFAULT_UNIVERSE, load_prices, synthetic_prices
 
-RESULTS = Path(__file__).resolve().parent / "results"
+RESULTS = Path("results")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -27,7 +28,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--start", default="2015-01-01")
     parser.add_argument("--end", default="2025-01-01")
     parser.add_argument("--lookback", type=int, default=12, help="momentum lookback in months")
-    parser.add_argument("--tc-bps", type=float, default=10.0, help="transaction cost in basis points")
+    parser.add_argument(
+        "--tc-bps", type=float, default=10.0, help="transaction cost in basis points"
+    )
     parser.add_argument("--quantile", type=float, default=0.2, help="top quantile held long")
     return parser
 

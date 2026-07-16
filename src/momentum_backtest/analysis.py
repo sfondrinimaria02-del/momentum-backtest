@@ -1,13 +1,14 @@
 """Shared experiment orchestration for the CLI and research notebook."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 import pandas as pd
 
-from src.backtest import run_backtest
-from src.metrics import summary_table
-from src.strategy import momentum_signal, month_end_prices, top_quantile_weights
+from momentum_backtest.backtest import run_backtest
+from momentum_backtest.metrics import summary_table
+from momentum_backtest.strategy import momentum_signal, month_end_prices, top_quantile_weights
 
 
 @dataclass(frozen=True)
@@ -53,7 +54,9 @@ def analyze(
     weights = top_quantile_weights(signal, quantile=quantile)
 
     first_signal = investable_signal_date(prices, lookback_months, quantile)
-    requested_start = pd.Timestamp(start_signal_date) if start_signal_date is not None else first_signal
+    requested_start = (
+        pd.Timestamp(start_signal_date) if start_signal_date is not None else first_signal
+    )
     eligible = weights.loc[weights.index >= requested_start]
     invested = eligible.abs().sum(axis=1) > 0.0
     if not invested.any():

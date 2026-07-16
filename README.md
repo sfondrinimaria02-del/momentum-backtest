@@ -34,11 +34,13 @@ Requires Python 3.10 or newer.
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 # macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e ".[dev]"
 
-python run_backtest.py
-python run_backtest.py --synthetic
-python run_backtest.py --lookback 6 --tc-bps 10 --quantile 0.2
+python -m momentum_backtest.cli
+python -m momentum_backtest.cli --synthetic
+python -m momentum_backtest.cli --lookback 6 --tc-bps 10 --quantile 0.2
+# or, after installation:
+momentum-backtest --lookback 6
 ```
 
 Real-data runs download adjusted closing prices through `yfinance`. Downloads are
@@ -54,8 +56,10 @@ Each successful run writes the following ignored artifacts under `results/`:
 
 ## Reference run
 
-Corrected close-only methodology, 10 bps transaction costs, prices requested from Yahoo
-Finance on 14 July 2026, common evaluation window 1 February 2016–31 December 2024:
+Close-only methodology, 10 bps transaction costs, common evaluation window 1 February
+2016–31 December 2024. Independently reproduced bit-for-bit against a fresh Yahoo Finance
+pull on 16 July 2026 (see `results/metadata_real_L12.json` for the exact package versions
+and universe from that run):
 
 | Portfolio | CAGR | Ann. vol | Sharpe | Sortino | Max drawdown |
 |---|---:|---:|---:|---:|---:|
@@ -74,30 +78,31 @@ to the output metadata file and a specific Git commit.
 
 ```text
 .
-├── .github/workflows/ci.yml  # lint and unit tests on Python 3.10 and 3.12
-├── src/
-│   ├── analysis.py           # aligned strategy/benchmark orchestration
-│   ├── backtest.py           # execution, drift, turnover, and transaction costs
-│   ├── data.py               # validated yfinance cache and synthetic generator
-│   ├── metrics.py            # CAGR, volatility, Sharpe, Sortino, drawdown
-│   └── strategy.py           # month-end signals and portfolio construction
-├── tests/                    # deterministic offline tests
-├── Momentum_Backtest.ipynb   # research workflow using the shared source modules
-├── RESEARCH_NOTE.md          # methodology and interpretation framework
-└── run_backtest.py           # command-line entry point
+├── .github/workflows/ci.yml        # lint, coverage, and unit tests on Python 3.10 and 3.12
+├── src/momentum_backtest/
+│   ├── analysis.py                 # aligned strategy/benchmark orchestration
+│   ├── backtest.py                 # execution, drift, turnover, and transaction costs
+│   ├── cli.py                      # command-line entry point
+│   ├── data.py                     # validated yfinance cache and synthetic generator
+│   ├── metrics.py                  # CAGR, volatility, Sharpe, Sortino, drawdown
+│   └── strategy.py                 # month-end signals and portfolio construction
+├── tests/                          # deterministic tests; real data mocked at the API boundary
+├── Momentum_Backtest.ipynb         # research workflow using the shared source modules
+└── RESEARCH_NOTE.md                # methodology and interpretation framework
 ```
 
 ## Development checks
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 ruff check .
-pytest
+pytest --cov=momentum_backtest --cov-report=term-missing
 ```
 
 The test suite covers signal timing, actual trading-month ends, portfolio normalization,
-rebalance timing, transaction costs, aligned evaluation periods, data validation,
-compounding, and drawdown from initial capital. CI has read-only repository permissions.
+rebalance timing, transaction costs, aligned evaluation periods, input validation error
+paths, and the yfinance response-parsing and caching logic (mocked at the API boundary -
+no real network calls in the default run). CI has read-only repository permissions.
 
 ## Research limitations
 

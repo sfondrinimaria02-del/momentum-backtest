@@ -83,8 +83,9 @@ drawdown.
 
 ## 7. Corrected reference results
 
-Prices were requested from Yahoo Finance on 14 July 2026. The common evaluation window
-runs from 1 February 2016 through 31 December 2024. Transaction costs are 10 bps.
+Prices were requested from Yahoo Finance on 14 July 2026 and independently reproduced
+bit-for-bit against a fresh pull on 16 July 2026. The common evaluation window runs from
+1 February 2016 through 31 December 2024. Transaction costs are 10 bps.
 
 | Portfolio | CAGR | Ann. vol | Sharpe | Sortino | Max drawdown |
 |---|---:|---:|---:|---:|---:|

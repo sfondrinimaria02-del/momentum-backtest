@@ -1,9 +1,10 @@
 """Validated market-data loading and deterministic synthetic data."""
+
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import numpy as np
 import pandas as pd
@@ -92,6 +93,10 @@ def load_prices(tickers: Sequence[str], start: str, end: str) -> pd.DataFrame:
         progress=False,
         threads=False,
     )
+    # yfinance returns (Price, Ticker) MultiIndex columns even for a single-ticker
+    # list request (verified empirically against yfinance 1.5.x) - the flat-column
+    # branch below is a defensive fallback in case a different yfinance version
+    # ever collapses to a plain Index for a single ticker.
     if isinstance(raw.columns, pd.MultiIndex):
         if "Close" not in raw.columns.get_level_values(0):
             raise ValueError("the data source response does not contain adjusted close prices")

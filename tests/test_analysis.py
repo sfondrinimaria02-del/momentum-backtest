@@ -1,5 +1,5 @@
-from src.analysis import analyze
-from src.data import synthetic_prices
+from momentum_backtest.analysis import analyze
+from momentum_backtest.data import synthetic_prices
 
 
 def test_strategy_and_benchmark_share_the_same_investable_period() -> None:
